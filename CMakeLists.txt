@@ -22,4 +22,5 @@ include_directories(
     $<INSTALL_INTERFACE:include>
 )
 
+add_subdirectory(src)
 add_subdirectory(examples)
