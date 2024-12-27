@@ -6,15 +6,23 @@
 
 extern int main(int argc, char **argv);
 
-namespace dpdk::inline eal {
+namespace dpdk{
+namespace eal {
 
-class EAL {
+class Context {
+  friend class EAL;
+  Context(int &argc, char **&argv);
+  ~Context() noexcept;
+};
+
+class EAL : Context {
   friend int ::main(int argc, char **argv);
   EAL(int &argc, char **&argv);
   EAL() = delete;
   EAL(const EAL &) = delete;
   ~EAL() noexcept;
 
+  inline auto n_lcores() { return rte_lcore_count(); }
   inline auto lcore_main() { return lcores_.main(); }
   inline auto workers() {
     return lcores_.workers() | std::views::filter([](auto &lcore) {
@@ -26,4 +34,6 @@ class EAL {
   lcore::Manager lcores_;
 };
 
-} // namespace dpdk::inline eal
+} // namespace eal
+using eal::EAL;
+} // namespace dpdk
