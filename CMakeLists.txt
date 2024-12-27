@@ -16,4 +16,10 @@ set(CMAKE_CXX_EXTENSIONS ON)
 add_compile_options(-g)
 add_compile_options(-Wall -Wextra -Werror)
 
+include_directories(
+  SYSTEM
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+
 add_subdirectory(examples)
