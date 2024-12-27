@@ -1,4 +1,5 @@
 link_libraries(
+    eal
   optimized
     PkgConfig::DPDK
   )
