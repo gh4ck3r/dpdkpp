@@ -34,7 +34,7 @@ std::vector<device::Ethernet> &EAL::ethdevs()
     if (!pktbuf_) throw std::logic_error {"No Pktbuf pool at the moment"};
     ethdevs_.reserve(n_ethdevs());
     for (uint16_t port_id = 0; port_id < n_ethdevs(); ++port_id) {
-      ethdevs_.emplace_back(device::Ethernet{port_id, pktbuf_});
+      ethdevs_.emplace_back(port_id, pktbuf_);
     }
   }
   return ethdevs_;
