@@ -1,30 +1,10 @@
-/* SPDX-License-Identifier: BSD-3-Clause
- * Copyright(c) 2010-2014 Intel Corporation.
- * Copyright (c) 2009, Olivier MATZ <zer0@droids-corp.org>
- * All rights reserved.
- */
+#include "commands.h"
+#include <format>
 
-#include <stdio.h>
-#include <stdint.h>
-#include <string.h>
-#include <stdlib.h>
-
-#include <cmdline_rdline.h>
-#include <cmdline_parse.h>
-#include <cmdline_parse_ipaddr.h>
-#include <cmdline_parse_num.h>
-#include <cmdline_parse_string.h>
-#include <cmdline.h>
-
-#include <rte_string_fns.h>
-
-#include "parse_obj_list.h"
-
-struct object_list global_obj_list;
-
+static inline std::string to_string(const cmdline_ipaddr_t &ip)
+{
 /* not defined under linux */
 #ifndef NIPQUAD
-#define NIPQUAD_FMT "%u.%u.%u.%u"
 #define NIPQUAD(addr)				\
 	(unsigned)((unsigned char *)&addr)[0],	\
 	(unsigned)((unsigned char *)&addr)[1],	\
@@ -32,168 +12,67 @@ struct object_list global_obj_list;
 	(unsigned)((unsigned char *)&addr)[3]
 #endif
 
-/**********************************************************/
+	return (ip.family == AF_INET) ?
+		std::format("{:d}.{:d}.{:d}.{:d}", NIPQUAD(ip.addr.ipv4)) :
+		std::format("{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:"
+								"{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}:{:02x}{:02x}",
+								RTE_IPV6_ADDR_SPLIT(&ip.addr.ipv6));
+}
 
-/* Show or delete tokens. 8< */
-struct cmd_obj_del_show_result {
-	cmdline_fixed_string_t action;
-	struct object *obj;
-};
-
-static void cmd_obj_del_show_parsed(void *parsed_result,
-				    struct cmdline *cl,
-				    __rte_unused void *data)
+void ObjDelShowCmd::on_parsed(const data_t &d, struct cmdline &cl)
 {
-	auto res = reinterpret_cast<cmd_obj_del_show_result *>(parsed_result);
-	char ip_str[INET6_ADDRSTRLEN];
+	const auto ip_str = to_string(d.obj->ip);
 
-	if (res->obj->ip.family == AF_INET)
-		snprintf(ip_str, sizeof(ip_str), NIPQUAD_FMT,
-			 NIPQUAD(res->obj->ip.addr.ipv4));
-	else
-		snprintf(ip_str, sizeof(ip_str), RTE_IPV6_ADDR_FMT,
-			 RTE_IPV6_ADDR_SPLIT(&res->obj->ip.addr.ipv6));
-
-	if (strcmp(res->action, "del") == 0) {
-		SLIST_REMOVE(&global_obj_list, res->obj, object, next);
-		cmdline_printf(cl, "Object %s removed, ip=%s\n",
-			       res->obj->name, ip_str);
-		free(res->obj);
-	}
-	else if (strcmp(res->action, "show") == 0) {
-		cmdline_printf(cl, "Object %s, ip=%s\n",
-			       res->obj->name, ip_str);
+	using std::operator""sv;
+	if (d.action == "del"sv) {
+		auto entry = data_store_.find(d.obj->name);
+		if (entry != data_store_.end()) {
+			cmdline_printf(&cl, "Object %s removed, ip=%s\n", d.obj->name, ip_str.c_str());
+			data_store_.erase(entry);
+		}
+	} else if (d.action == "show"sv) {
+		cmdline_printf(&cl, "Object %s, ip=%s\n", d.obj->name, ip_str.c_str() );
 	}
 }
 
-cmdline_parse_token_string_t cmd_obj_action =
-	TOKEN_STRING_INITIALIZER(struct cmd_obj_del_show_result,
-				 action, "show#del");
-parse_token_obj_list_t cmd_obj_obj =
-	TOKEN_OBJ_LIST_INITIALIZER(struct cmd_obj_del_show_result, obj,
-				   &global_obj_list);
-
-cmdline_parse_inst_t cmd_obj_del_show = {
-	.f = cmd_obj_del_show_parsed,  /* function to call */
-	.data = NULL,      /* 2nd arg of func */
-	.help_str = "Show/del an object",
-	.tokens = {        /* token list, NULL terminated */
-		reinterpret_cast<cmdline_token_hdr*>(&cmd_obj_action),
-		reinterpret_cast<cmdline_token_hdr*>(&cmd_obj_obj),
-		NULL,
-	},
-};
-/* >8 End of show or delete tokens. */
-
-/**********************************************************/
-
-struct cmd_obj_add_result {
-	cmdline_fixed_string_t action;
-	cmdline_fixed_string_t name;
-	cmdline_ipaddr_t ip;
-};
-
-static void cmd_obj_add_parsed(void *parsed_result,
-			       struct cmdline *cl,
-			       __rte_unused void *data)
-{
-	auto res = reinterpret_cast<cmd_obj_add_result*>(parsed_result);
-	struct object *o;
-	char ip_str[INET6_ADDRSTRLEN];
-
-	SLIST_FOREACH(o, &global_obj_list, next) {
-		if (!strcmp(res->name, o->name)) {
-			cmdline_printf(cl, "Object %s already exist\n", res->name);
-			return;
-		}
-		break;
-	}
-
-	o = reinterpret_cast<object*>(malloc(sizeof(*o))); // XXX
-	if (!o) {
-		cmdline_printf(cl, "mem error\n");
+void ObjAddCmd::on_parsed(const data_t &d, struct cmdline &cl) {
+	const std::string name {d.name};
+	if (data_store_.contains(name)) {
+		cmdline_printf(&cl, "Object %s already exist\n", name.data());
 		return;
 	}
-	strlcpy(o->name, res->name, sizeof(o->name));
-	o->ip = res->ip;
-	SLIST_INSERT_HEAD(&global_obj_list, o, next);
 
-	if (o->ip.family == AF_INET)
-		snprintf(ip_str, sizeof(ip_str), NIPQUAD_FMT,
-			 NIPQUAD(o->ip.addr.ipv4));
-	else
-		snprintf(ip_str, sizeof(ip_str), RTE_IPV6_ADDR_FMT,
-			 RTE_IPV6_ADDR_SPLIT(&o->ip.addr.ipv6));
+	object o {
+		.name = {},
+		.ip = d.ip,
+	};
+	name.copy(o.name, sizeof(o.name));
+	data_store_[name] = std::move(o);
 
-	cmdline_printf(cl, "Object %s added, ip=%s\n",
-		       o->name, ip_str);
+	const auto ip_str = to_string(d.ip);
+	cmdline_printf(&cl, "Object %s added, ip=%s\n", name.c_str(), ip_str.c_str());
 }
 
-cmdline_parse_token_string_t cmd_obj_action_add =
-	TOKEN_STRING_INITIALIZER(struct cmd_obj_add_result, action, "add");
-cmdline_parse_token_string_t cmd_obj_name =
-	TOKEN_STRING_INITIALIZER(struct cmd_obj_add_result, name, NULL);
-cmdline_parse_token_ipaddr_t cmd_obj_ip =
-	TOKEN_IPADDR_INITIALIZER(struct cmd_obj_add_result, ip);
-
-cmdline_parse_inst_t cmd_obj_add = {
-	.f = cmd_obj_add_parsed,  /* function to call */
-	.data = NULL,      /* 2nd arg of func */
-	.help_str = "Add an object (name, val)",
-	.tokens = {        /* token list, NULL terminated */
-		reinterpret_cast<cmdline_token_hdr*>(&cmd_obj_action_add),
-		reinterpret_cast<cmdline_token_hdr*>(&cmd_obj_name),
-		reinterpret_cast<cmdline_token_hdr*>(&cmd_obj_ip),
-		NULL,
-	},
-};
-
-/**********************************************************/
-
-struct cmd_help_result {
-	cmdline_fixed_string_t help;
-};
-
-static void cmd_help_parsed(__rte_unused void *parsed_result,
-			    struct cmdline *cl,
-			    __rte_unused void *data)
+void HelpCmd::on_parsed(const data_t &, struct cmdline &cl)
 {
-	cmdline_printf(cl,
-		       "Demo example of command line interface in RTE\n\n"
-		       "This is a readline-like interface that can be used to\n"
-		       "debug your RTE application. It supports some features\n"
-		       "of GNU readline like completion, cut/paste, and some\n"
-		       "other special bindings.\n\n"
-		       "This demo shows how rte_cmdline library can be\n"
-		       "extended to handle a list of objects. There are\n"
-		       "3 commands:\n"
-		       "- add obj_name IP\n"
-		       "- del obj_name\n"
-		       "- show obj_name\n\n");
+	cmdline_printf(&cl,
+			"Demo example of command line interface in RTE\n\n"
+			"This is a readline-like interface that can be used to\n"
+			"debug your RTE application. It supports some features\n"
+			"of GNU readline like completion, cut/paste, and some\n"
+			"other special bindings.\n\n"
+			"This demo shows how rte_cmdline library can be\n"
+			"extended to handle a list of objects. There are\n"
+			"3 commands:\n"
+			"- add obj_name IP\n"
+			"- del obj_name\n"
+			"- show obj_name\n\n");
 }
 
-cmdline_parse_token_string_t cmd_help_help =
-	TOKEN_STRING_INITIALIZER(struct cmd_help_result, help, "help");
-
-cmdline_parse_inst_t cmd_help = {
-	.f = cmd_help_parsed,  /* function to call */
-	.data = NULL,      /* 2nd arg of func */
-	.help_str = "show help",
-	.tokens = {        /* token list, NULL terminated */
-		reinterpret_cast<cmdline_token_hdr*>(&cmd_help_help),
-		NULL,
-	},
-};
-
-/**********************************************************/
-/**********************************************************/
-/****** CONTEXT (list of instruction) */
-
-/* Cmdline context list of commands in NULL-terminated table. 8< */
-cmdline_parse_ctx_t main_ctx[] = {
-	(cmdline_parse_inst_t *)&cmd_obj_del_show,
-	(cmdline_parse_inst_t *)&cmd_obj_add,
-	(cmdline_parse_inst_t *)&cmd_help,
-	NULL,
-};
-/* >8 End of context list. */
+void ListCmd::on_parsed(const data_t &, struct cmdline &cl)
+{
+	for (const auto &[name, obj] : data_store_) {
+		cmdline_printf(&cl,
+				"%s, %s, %s\n", name.c_str(), obj.name, to_string(obj.ip).c_str());
+	}
+}

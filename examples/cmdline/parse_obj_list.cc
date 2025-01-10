@@ -1,110 +1,51 @@
-/* SPDX-License-Identifier: BSD-3-Clause
- * Copyright(c) 2010-2014 Intel Corporation.
- * Copyright (c) 2009, Olivier MATZ <zer0@droids-corp.org>
- * All rights reserved.
- */
-
-#include <stdio.h>
-#include <inttypes.h>
-#include <errno.h>
-#include <ctype.h>
-#include <string.h>
-
-#include <cmdline_parse.h>
-#include <cmdline_parse_ipaddr.h>
-
-#include <rte_string_fns.h>
-
 #include "parse_obj_list.h"
+#include <string_view>
+#include <ranges>
 
-/* This file is an example of extension of libcmdline. It provides an
- * example of objects stored in a list. */
+global_obj_map_t global_obj_map;
 
-struct cmdline_token_ops token_obj_list_ops = {
-	.parse = parse_obj_list,
-	.complete_get_nb = complete_get_nb_obj_list,
-	.complete_get_elt = complete_get_elt_obj_list,
-	.get_help = get_help_obj_list,
-};
-
-int
-parse_obj_list(cmdline_parse_token_hdr_t *tk, const char *buf, void *res,
-	unsigned ressize)
+int TokenObjList::parse(const char *buf, void *res, unsigned ressize)
 {
-	struct token_obj_list *tk2 = (struct token_obj_list *)tk;
-	struct token_obj_list_data *tkd = &tk2->obj_list_data;
-	struct object *o;
+	if (*buf == 0) return -1;
+
+	if (res && ressize < sizeof(object *)) return -1;
+
 	unsigned int token_len = 0;
+	while(!cmdline_isendoftoken(buf[token_len])) token_len++;
 
-	if (*buf == 0)
-		return -1;
+	for (const auto &[name, obj] : global_obj_map) {
+		if (name.size() == token_len && name.compare(0, token_len, buf)) {
+			if (res) *(const object **)res = &obj;	// XXX
+			return token_len;
+		}
+	}
+	return -ENOENT;
+}
 
-	if (res && ressize < sizeof(struct object *))
-		return -1;
+int TokenObjList::complete_get_nb()
+{
+	return global_obj_map.size();
+}
 
-	while(!cmdline_isendoftoken(buf[token_len]))
-		token_len++;
-
-	SLIST_FOREACH(o, tkd->list, next) {
-		if (token_len != strnlen(o->name, OBJ_NAME_LEN_MAX))
-			continue;
-		if (strncmp(buf, o->name, token_len))
-			continue;
+int TokenObjList::complete_get_elt(int idx, char *dstbuf, unsigned int size)
+{
+	for (const auto &[name, _] : global_obj_map
+			| std::views::drop(idx)
+			| std::views::take(1))
+	{
+		if (name.size() + 1 > size) return -ENOBUFS;
+		if (dstbuf) dstbuf[name.copy(dstbuf, size - 1)] = 0x00;
 		break;
 	}
-	if (!o) /* not found */
-		return -1;
-
-	/* store the address of object in structure */
-	if (res)
-		*(struct object **)res = o;
-
-	return token_len;
-}
-
-int complete_get_nb_obj_list(cmdline_parse_token_hdr_t *tk)
-{
-	struct token_obj_list *tk2 = (struct token_obj_list *)tk;
-	struct token_obj_list_data *tkd = &tk2->obj_list_data;
-	struct object *o;
-	int ret = 0;
-
-	SLIST_FOREACH(o, tkd->list, next) {
-		ret ++;
-	}
-	return ret;
-}
-
-int complete_get_elt_obj_list(cmdline_parse_token_hdr_t *tk,
-			      int idx, char *dstbuf, unsigned int size)
-{
-	struct token_obj_list *tk2 = (struct token_obj_list *)tk;
-	struct token_obj_list_data *tkd = &tk2->obj_list_data;
-	struct object *o;
-	int i = 0;
-	unsigned len;
-
-	SLIST_FOREACH(o, tkd->list, next) {
-		if (i++ == idx)
-			break;
-	}
-	if (!o)
-		return -1;
-
-	len = strnlen(o->name, OBJ_NAME_LEN_MAX);
-	if ((len + 1) > size)
-		return -1;
-
-	if (dstbuf)
-		strlcpy(dstbuf, o->name, size);
 
 	return 0;
 }
 
-
-int get_help_obj_list(__rte_unused cmdline_parse_token_hdr_t *tk,
-		      char *dstbuf, unsigned int size)
+int TokenObjList::get_help(char *dstbuf, unsigned int size)
 {
-	snprintf(dstbuf, size, "Obj-List");
+	static constexpr std::string_view msg {"Obj-List"};
+	dstbuf[msg.copy(dstbuf, size - 1)] = 0x00;
+
 	return 0;
 }
+

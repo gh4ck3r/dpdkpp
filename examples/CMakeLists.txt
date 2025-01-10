@@ -1,5 +1,6 @@
 link_libraries(
     eal
+    cmdline
   optimized
     PkgConfig::DPDK
   )
