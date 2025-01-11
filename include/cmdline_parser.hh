@@ -1,53 +1,38 @@
 #pragma once
+#include <algorithm>
 #include <concepts>
-#include <tuple>
-#include <utility>
-#include <vector>
 #include <cmdline_token.hh>
 #include <cmdline.h>
 
 namespace dpdk::cmdline {
 
-template <typename BaseT>
-struct PolyStore : private std::vector<BaseT> {
-  using container_type = std::vector<BaseT>;
-  PolyStore() : container_type({nullptr}) {}
-  virtual ~PolyStore() noexcept {
-    for (const auto &p : *this) delete p;
-  }
-
-	inline operator BaseT*() const { return get(); }
-  inline BaseT *get() const { return container_type::data(); }
-
-  template <typename T, typename...ARGS>
-    requires std::derived_from<T, BaseT> and std::constructible_from<T, ARGS...>
-  inline auto append(ARGS&&...args) {
-    return container_type::emplace_back(
-        std::exchange(container_type::back(),
-          new T{std::forward<ARGS>(args)...}));
-  }
-};
-
 namespace command {
 
 class Context {
-	cmdline_parse_ctx_t const ctx_;
-  using ptr_t = decltype(ctx_);
-  static_assert(std::is_pointer_v<ptr_t>);
-
- protected:
+  using ctx_t = cmdline_parse_inst_t;
   Context(size_t n_tokens = 0);
-  Context(const Context&) = delete;
-  Context(Context&&) = delete;
-
-  inline auto &initialize(const cmdline_parse_inst_t &arg) {
-    *ctx_ = arg;
-    return ctx_->tokens;
-  }
 
  public:
   virtual ~Context() noexcept;
   inline auto get() const { return ctx_; }
+
+ protected:
+  template <typename...ARGS>  // requires TokenImpl
+  Context(const ctx_t &ctx, ARGS&&...args) :
+    Context(sizeof...(ARGS)) {
+      *ctx_ = ctx;
+      (token_parsers_.append<ARGS>(std::forward<ARGS>(args)), ...);
+      std::copy_n(token_parsers_.get(), sizeof...(ARGS) + 1, ctx_->tokens);
+    }
+  Context(const Context&) = delete;
+  Context(Context&&) = delete;
+
+ private:
+  using pointer = cmdline_parse_ctx_t;
+  static_assert(std::is_pointer_v<pointer>
+            and std::is_same_v<std::add_pointer_t<ctx_t>, pointer>);
+	pointer const ctx_;
+  token::TokenParsers token_parsers_;
 };
 
 template <typename T>
@@ -62,36 +47,27 @@ concept Impl = requires(T t, decltype(cmdline_inst::help_str) msg) {
 
 } // namespace command
 
-template <typename T>
+template <typename CRTP>
 class Parser : public command::Context {
  public:
-	Parser() : Context(std::tuple_size_v<decltype(T::token_parsers)>) {
-    static_assert(std::is_base_of_v<Parser, T>, "use CRTP");
-    static_assert(command::Impl<T>);
-
-    auto &token_parsers = initialize({
+  template <typename...ARGS>
+  Parser(ARGS&&...args) : Context({
       .f = on_parsed,
       .data = this,
-      .help_str = data(T::helpmsg),
-		});
-
-    std::apply([&token_parsers] (auto&&...token) {
-        constexpr auto as_hdr = [] (auto&&t) {
-          using hdr_t = cmdline_parse_token_hdr_t;
-          return const_cast<hdr_t*>(reinterpret_cast<const hdr_t*>(&t));
-        };
-        size_t i = 0;
-        ((token_parsers[i++] = as_hdr(token)), ...), token_parsers[i] = nullptr;
-      }, T::token_parsers);
+      .help_str = data(CRTP::helpmsg),
+		}, std::forward<ARGS>(args)...)
+  {
+    static_assert(std::is_base_of_v<Parser, CRTP>, "use CRTP");
+    static_assert(command::Impl<CRTP>);
 	}
   virtual ~Parser() noexcept {}
 
  private:
   static void on_parsed(void *result, struct cmdline *cl, void *THIS) {
-    static_assert(sizeof(typename T::data_t) <= CMDLINE_PARSE_RESULT_BUFSIZE);
-    reinterpret_cast<T*>(THIS)->on_parsed(
-        *reinterpret_cast<T::data_t*>(result),
-        *cl);
+    static_assert(sizeof(typename CRTP::data_t) <= CMDLINE_PARSE_RESULT_BUFSIZE);
+    reinterpret_cast<CRTP*>(THIS)->on_parsed(
+        *reinterpret_cast<CRTP::data_t*>(result),
+        *cl); // FIXME remove
   }
 };
 

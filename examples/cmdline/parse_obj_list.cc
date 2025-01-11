@@ -2,7 +2,7 @@
 #include <string_view>
 #include <ranges>
 
-global_obj_map_t global_obj_map;
+global_obj_map_t global_obj_map;	// TODO remove
 
 int TokenObjList::parse(const char *buf, void *res, unsigned ressize)
 {
@@ -30,7 +30,7 @@ int TokenObjList::complete_get_nb()
 int TokenObjList::complete_get_elt(int idx, char *dstbuf, unsigned int size)
 {
 	for (const auto &[name, _] : global_obj_map
-			| std::views::drop(idx)
+			| std::views::drop(idx + 1)
 			| std::views::take(1))
 	{
 		if (name.size() + 1 > size) return -ENOBUFS;
