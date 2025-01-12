@@ -5,10 +5,10 @@
 
 namespace dpdk::cmdline {
 
-class CmdLine {
+class Interface {
  public:
-  CmdLine() = default;
-  ~CmdLine() noexcept = default;
+  Interface() = default;
+  ~Interface() noexcept = default;
 
   template <typename CMD, typename...ARGS>
     requires command::Impl<CMD> and std::constructible_from<CMD, ARGS...>
@@ -20,11 +20,11 @@ class CmdLine {
   void interact(const std::string &prompt);
 
  private:
-  std::vector<std::unique_ptr<command::Context>> cmds_;
+  std::vector<std::unique_ptr<command::Context>> cmds_; // FIXME use ObjectStore
 };
 
 } // namespace dpdk::cmdline
 
 namespace dpdk {
-using cmdline::CmdLine;
+using CLI = cmdline::Interface;
 } // namespace dpdk

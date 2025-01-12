@@ -5,7 +5,7 @@
 
 namespace dpdk::cmdline {
 
-void CmdLine::interact(const std::string &prompt)
+void Interface::interact(const std::string &prompt)
 {
   using ctx_t = cmdline_parse_ctx_t;
   std::vector<ctx_t> ctx(cmds_.size() + 1, nullptr);

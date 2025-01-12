@@ -3,7 +3,7 @@
 
 int main()
 {
-  dpdk::CmdLine cl{};
+  dpdk::CLI cl{};
 
   cl.add<ObjDelShowCmd>(global_obj_map)
     .add<ObjAddCmd>(global_obj_map)
