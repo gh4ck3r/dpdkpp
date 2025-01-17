@@ -1,58 +1,49 @@
 #pragma once
 #include <string_view>
-#include <cmdline_parser.hh>
-#include <cmdline_token.hh>
+#include <cmdline/parser.hh>
+#include <cmdline/token.hh>
 #include "parse_obj_list.h"
 
+using dpdk::cmdline::CmdParser;
+using TokenString = dpdk::cmdline::token::String;
+using TokenIpAddr = dpdk::cmdline::token::IpAddr;
+
 /**********************************************************/
-class ObjDelShowCmd : public dpdk::cmdline::Parser<ObjDelShowCmd>
+class ObjDelShowCmd : public CmdParser<TokenString, TokenObjList>
 {
-  friend class Parser;
+  friend class CmdParser;
   ObjDelShowCmd() = delete;
   global_obj_map_t & data_store_;
 
  public:
-  struct data_t {
-    cmdline_fixed_string_t action;
-    struct object *obj;
-  };
+  ObjDelShowCmd(global_obj_map_t &m) : CmdParser {
+      "Show/del an object",
+      {"show#del"},
+      {m},
+    }, data_store_(m)
+  {}
 
-  using String = dpdk::cmdline::token::String;
-  ObjDelShowCmd(global_obj_map_t &m) : Parser {
-        String {offsetof(data_t, action), "show#del"},
-        TokenObjList {offsetof(data_t, obj)},
-      }, data_store_(m)
-  {
-  }
-
-  static constexpr inline std::string_view helpmsg {"Show/del an object"};
-
-  void on_parsed(const data_t &d, struct cmdline &cl);
+  void on_parsed(const cmdline_fixed_string_t &, TokenObjList::arg_type &, struct cmdline &cl) override;
 };
 
 /**********************************************************/
-struct ObjAddCmd : dpdk::cmdline::Parser<ObjAddCmd>
+struct ObjAddCmd : CmdParser<TokenString, TokenString, TokenIpAddr>
 {
-  struct data_t {
-    cmdline_fixed_string_t action;
-    cmdline_fixed_string_t name;
-    cmdline_ipaddr_t ip;
-  };
+  void on_parsed(
+      const cmdline_fixed_string_t &,
+      const cmdline_fixed_string_t &,
+      const cmdline_ipaddr_t &,
+      struct cmdline &cl) override;
 
-  static constexpr inline std::string_view helpmsg {"Add an object (name, val)"};
-
-  void on_parsed(const data_t &d, struct cmdline &cl);
-
-  using String = dpdk::cmdline::token::String;
-  using IpAddr = dpdk::cmdline::token::IpAddr;
-  ObjAddCmd(global_obj_map_t &m) : Parser {
-      String {offsetof(data_t, action), "add"},
-      String {offsetof(data_t, name)},
-      IpAddr{offsetof(data_t, ip)},
+  ObjAddCmd(global_obj_map_t &m) :
+    CmdParser {
+      "Add an object (name, val)",
+      {"add"},
+      {},
+      {},
     },
     data_store_(m)
-  {
-  }
+  {}
 
  private:
   ObjAddCmd() = delete;
@@ -60,45 +51,25 @@ struct ObjAddCmd : dpdk::cmdline::Parser<ObjAddCmd>
 };
 
 /**********************************************************/
-struct HelpCmd : dpdk::cmdline::Parser<HelpCmd>
+struct HelpCmd : CmdParser<TokenString>
 {
-  struct data_t {
-    const cmdline_fixed_string_t help;
-  };
+  void on_parsed(const cmdline_fixed_string_t&, struct cmdline &) override;
 
-  static constexpr inline std::string_view helpmsg {"show help"};
-
-  void on_parsed(const data_t &, struct cmdline &cl);
-
-  using String = dpdk::cmdline::token::String;
-  HelpCmd() : Parser {
-      String {offsetof(data_t, help), "help"},
-    }
+  HelpCmd() : CmdParser {"show help", {"help"}, }
   {
   }
 };
 
-class ListCmd : public dpdk::cmdline::Parser<ListCmd>
+class ListCmd : public CmdParser<TokenString>
 {
   ListCmd() = delete;
   global_obj_map_t & data_store_;
 
-  using String = dpdk::cmdline::token::String;
  public:
-  ListCmd(global_obj_map_t &m) : Parser {
-      String{offsetof(data_t, list), "list"},
-    },
+  ListCmd(global_obj_map_t &m) :
+    CmdParser {"list objects", {"list"}, },
     data_store_(m)
-  {
-  }
+  {}
 
-  struct data_t {
-    const cmdline_fixed_string_t list;
-  };
-
-  static constexpr inline std::string_view helpmsg {"list objects"};
-  using tokens_t = std::tuple<std::string_view>;
-
-  void on_parsed(const data_t &, struct cmdline &cl);
-
+  void on_parsed(const cmdline_fixed_string_t &, struct cmdline &cl) override;
 };

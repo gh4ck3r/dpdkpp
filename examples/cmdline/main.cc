@@ -3,13 +3,17 @@
 
 int main()
 {
-  dpdk::CLI cl{};
+  struct CLI : dpdk::CLI {
+    global_obj_map_t global_obj_map;
+    CLI() {
+      add<ObjAddCmd>(global_obj_map);
+      add<ObjDelShowCmd>(global_obj_map);
+      add<ListCmd>(global_obj_map);
+      add<HelpCmd>();
+    }
+  } cli;
 
-  cl.add<ObjDelShowCmd>(global_obj_map)
-    .add<ObjAddCmd>(global_obj_map)
-    .add<ListCmd>(global_obj_map)
-    .add<HelpCmd>()
-    .interact("example> ");
+  cli.interact("example> ");
 
   return 0;
 }

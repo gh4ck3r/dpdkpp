@@ -19,24 +19,28 @@ static inline std::string to_string(const cmdline_ipaddr_t &ip)
 								RTE_IPV6_ADDR_SPLIT(&ip.addr.ipv6));
 }
 
-void ObjDelShowCmd::on_parsed(const data_t &d, struct cmdline &cl)
+void ObjDelShowCmd::on_parsed(const cmdline_fixed_string_t &action, TokenObjList::arg_type &obj, struct cmdline &cl)
 {
-	const auto ip_str = to_string(d.obj->ip);
+	const auto ip_str = to_string(obj->ip);
 
 	using std::operator""sv;
-	if (d.action == "del"sv) {
-		auto entry = data_store_.find(d.obj->name);
+	if (action == "del"sv) {
+		auto entry = data_store_.find(obj->name);
 		if (entry != data_store_.end()) {
-			cmdline_printf(&cl, "Object %s removed, ip=%s\n", d.obj->name, ip_str.c_str());
+			cmdline_printf(&cl, "Object %s removed, ip=%s\n", obj->name, ip_str.c_str());
 			data_store_.erase(entry);
 		}
-	} else if (d.action == "show"sv) {
-		cmdline_printf(&cl, "Object %s, ip=%s\n", d.obj->name, ip_str.c_str() );
+	} else if (action == "show"sv) {
+		cmdline_printf(&cl, "Object %s, ip=%s\n", obj->name, ip_str.c_str() );
 	}
 }
 
-void ObjAddCmd::on_parsed(const data_t &d, struct cmdline &cl) {
-	const std::string name {d.name};
+void ObjAddCmd::on_parsed(const cmdline_fixed_string_t &,
+      const cmdline_fixed_string_t &_name,
+      const cmdline_ipaddr_t &ip,
+      struct cmdline &cl)
+{
+	const std::string name {_name};
 	if (data_store_.contains(name)) {
 		cmdline_printf(&cl, "Object %s already exist\n", name.data());
 		return;
@@ -44,16 +48,16 @@ void ObjAddCmd::on_parsed(const data_t &d, struct cmdline &cl) {
 
 	object o {
 		.name = {},
-		.ip = d.ip,
+		.ip = ip,
 	};
 	name.copy(o.name, sizeof(o.name));
 	data_store_[name] = std::move(o);
 
-	const auto ip_str = to_string(d.ip);
+	const auto ip_str = to_string(ip);
 	cmdline_printf(&cl, "Object %s added, ip=%s\n", name.c_str(), ip_str.c_str());
 }
 
-void HelpCmd::on_parsed(const data_t &, struct cmdline &cl)
+void HelpCmd::on_parsed(const cmdline_fixed_string_t&, struct cmdline &cl)
 {
 	cmdline_printf(&cl,
 			"Demo example of command line interface in RTE\n\n"
@@ -69,7 +73,7 @@ void HelpCmd::on_parsed(const data_t &, struct cmdline &cl)
 			"- show obj_name\n\n");
 }
 
-void ListCmd::on_parsed(const data_t &, struct cmdline &cl)
+void ListCmd::on_parsed(const cmdline_fixed_string_t &, struct cmdline &cl)
 {
 	for (const auto &[name, obj] : data_store_) {
 		cmdline_printf(&cl,
